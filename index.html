@@ -1,0 +1,1316 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>健康大冒險：完美餐盤版</title>
+    
+    <!-- React Framework -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Google Fonts -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
+        
+        body { 
+            font-family: 'Noto Sans TC', sans-serif; 
+            background-color: #f0f9ff; 
+            overflow-x: hidden; 
+            scroll-behavior: smooth; 
+        }
+        
+        /* 避免導航遮擋 */
+        section { scroll-margin-top: 100px; }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 10px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 5px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+        /* Animation Keyframes */
+        @keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0px); } }
+        .animate-float { animation: float 3s ease-in-out infinite; }
+
+        @keyframes pulse-glow { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+        .animate-pulse-glow { animation: pulse-glow 2s infinite; }
+
+        /* Blood Cell Animation */
+        @keyframes flow { 0% { left: -20%; } 100% { left: 120%; } }
+        .blood-cell { animation: flow 4s linear infinite; }
+        .blood-cell.slow { animation: flow 10s linear infinite; }
+
+        /* Digestive Track */
+        @keyframes shake-stuck { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-2px) rotate(-2deg); } 75% { transform: translateX(2px) rotate(2deg); } }
+        .stuck-effect { animation: shake-stuck 0.3s infinite; }
+
+        /* Plate Animations */
+        @keyframes pop-in { 0% { transform: scale(0); opacity: 0; } 80% { transform: scale(1.1); opacity: 1; } 100% { transform: scale(1); } }
+        .food-pop { animation: pop-in 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // --- SVGs ---
+        const Icons = {
+            Menu: () => <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>,
+            X: () => <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 18 18"/></svg>,
+            Heart: () => <svg className="w-6 h-6 text-red-500 fill-current" viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>,
+            Check: () => <svg className="w-6 h-6 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>,
+            ArrowRight: () => <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>,
+            Sound: () => <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>,
+            Search: () => <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        };
+
+        // --- SUB COMPONENTS DEFINITIONS ---
+
+        // GEMINI FEATURE 1: HEALTHY PLATE LAB (AI Recipe + TTS)
+        const HealthyPlateLab = ({ updateHp, fetchGeminiContent, fetchGeminiTTS }) => {
+            const [veggie, setVeggie] = useState(0); 
+            const [protein, setProtein] = useState(0);
+            const [carb, setCarb] = useState(0); 
+            const [showGuide, setShowGuide] = useState(false);
+            const [step, setStep] = useState(0); 
+            
+            // AI States
+            const [recipe, setRecipe] = useState(null);
+            const [recipeLoading, setRecipeLoading] = useState(false);
+            const [ttsLoading, setTtsLoading] = useState(false);
+
+            const isBalanced = veggie >= 4 && protein >= 2 && carb >= 2 && veggie <= 6 && protein <= 4 && carb <= 4;
+            const isTooMuchCarb = carb > 2 && veggie < 4;
+            const isTooMuchMeat = protein > 2 && veggie < 4;
+
+            const resetPlate = () => {
+                setVeggie(0);
+                setProtein(0);
+                setCarb(0);
+                setRecipe(null); 
+                updateHp(5);
+            };
+
+            const eatingSteps = [
+                { text: "1. 先吃蔬菜與喝湯", desc: "墊胃、增加飽足感，穩定血糖。", icon: "🥦" },
+                { text: "2. 再吃豆魚蛋肉類", desc: "補充蛋白質，幫助肌肉生長。", icon: "🍗" },
+                { text: "3. 最後吃米飯澱粉", desc: "已經半飽了，澱粉就不會吃太多！", icon: "🍚" }
+            ];
+
+            const generateRecipe = async () => {
+                if (!isBalanced) return alert("請先完成完美的 211 餐盤再生成食譜喔！");
+                
+                setRecipeLoading(true);
+                setRecipe(null);
+                
+                const plateDescription = "一份均衡的午餐，比例為：蔬菜 50%，優質蛋白質 25%，全穀物澱粉 25%。";
+                const userPrompt = `請為一個正在學習健康飲食的小學生設計一道簡單、有趣且美味的午餐食譜。這道菜必須符合以下營養要求：${plateDescription} 請給出食譜名稱、所需材料和簡單的步驟。使用吸引兒童的口吻，字數控制在 150 字以內。`;
+                const systemInstruction = "你是一位專門為兒童設計健康食譜的頂級營養師。你的回答必須是繁體中文，且口氣要充滿活力和鼓勵。請不要加入任何 Markdown 格式或標題，直接輸出食譜內容。";
+                
+                const result = await fetchGeminiContent(userPrompt, systemInstruction);
+                setRecipe(result.text);
+                setRecipeLoading(false);
+            };
+
+            const playRecipe = async () => {
+                if(!recipe) return;
+                setTtsLoading(true);
+                await fetchGeminiTTS(recipe);
+                setTtsLoading(false);
+            };
+
+            return (
+                <div className="bg-white rounded-3xl p-6 md:p-8 shadow-xl border border-green-200 flex flex-col md:flex-row gap-8">
+                    
+                    {/* LEFT: THE PLATE INTERACTION */}
+                    <div className="flex-1 flex flex-col items-center">
+                        <div className="relative w-64 h-64 md:w-80 md:h-80 bg-slate-100 rounded-full border-8 border-white shadow-[0_0_20px_rgba(0,0,0,0.1)] overflow-hidden mb-6 relative">
+                            {/* Visual Feedback Overlay */}
+                            {isBalanced && <div className="absolute inset-0 z-20 border-8 border-yellow-400 rounded-full animate-pulse-glow pointer-events-none"></div>}
+                            
+                            {/* SECTIONS */}
+                            <div className="absolute inset-0 flex flex-wrap">
+                                {/* Top Half: Veggies (50%) */}
+                                <div className="w-full h-1/2 bg-green-50 border-b border-white/50 relative flex items-center justify-center overflow-hidden">
+                                    <span className="absolute text-green-200 font-bold text-4xl opacity-30 z-0">蔬菜 50%</span>
+                                    {/* Filled Veggies */}
+                                    <div className="flex flex-wrap items-center justify-center gap-1 p-4 z-10 w-full h-full content-center">
+                                        {[...Array(veggie)].map((_, i) => <span key={i} className="text-2xl food-pop">🥦</span>)}
+                                    </div>
+                                </div>
+                                
+                                {/* Bottom Left: Protein (25%) */}
+                                <div className="w-1/2 h-1/2 bg-red-50 border-r border-white/50 relative flex items-center justify-center overflow-hidden">
+                                    <span className="absolute text-red-200 font-bold text-2xl opacity-30 z-0">豆肉 25%</span>
+                                    <div className="flex flex-wrap items-center justify-center gap-1 p-2 z-10 w-full h-full content-center">
+                                        {[...Array(protein)].map((_, i) => <span key={i} className="text-2xl food-pop">🍗</span>)}
+                                    </div>
+                                </div>
+
+                                {/* Bottom Right: Carbs (25%) */}
+                                <div className="w-1/2 h-1/2 bg-yellow-50 relative flex items-center justify-center overflow-hidden">
+                                    <span className="absolute text-yellow-200 font-bold text-2xl opacity-30 z-0">飯 25%</span>
+                                    <div className="flex flex-wrap items-center justify-center gap-1 p-2 z-10 w-full h-full content-center">
+                                        {[...Array(carb)].map((_, i) => <span key={i} className="text-2xl food-pop">🍚</span>)}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* STATUS TEXT */}
+                        <div className="text-center mb-6 h-12">
+                            {isBalanced ? (
+                                <div className="text-green-600 font-bold text-xl animate-bounce">✨ 完美！這就是 211 健康餐盤！</div>
+                            ) : isTooMuchCarb ? (
+                                <div className="text-yellow-600 font-bold">⚠️ 飯太多了！容易想睡覺喔！</div>
+                            ) : isTooMuchMeat ? (
+                                <div className="text-red-600 font-bold">⚠️ 肉太多了！蔬菜要加倍！</div>
+                            ) : (
+                                <div className="text-slate-400 font-bold">點擊下方按鈕，把盤子填滿！</div>
+                            )}
+                        </div>
+
+                        {/* CONTROLS */}
+                        <div className="flex gap-2 w-full max-w-md">
+                            <button onClick={() => setVeggie(v => Math.min(v+1, 6))} className="flex-1 bg-green-500 hover:bg-green-600 text-white py-3 rounded-xl font-bold shadow-md active:scale-95 transition-all">
+                                + 蔬菜
+                            </button>
+                            <button onClick={() => setProtein(v => Math.min(v+1, 4))} className="flex-1 bg-red-500 hover:bg-red-600 text-white py-3 rounded-xl font-bold shadow-md active:scale-95 transition-all">
+                                + 豆肉蛋
+                            </button>
+                            <button onClick={() => setCarb(v => Math.min(v+1, 4))} className="flex-1 bg-yellow-400 hover:bg-yellow-500 text-yellow-900 py-3 rounded-xl font-bold shadow-md active:scale-95 transition-all">
+                                + 飯麵
+                            </button>
+                        </div>
+                        <button onClick={resetPlate} className="mt-4 text-slate-400 text-sm underline hover:text-slate-600">
+                            清空重來
+                        </button>
+                    </div>
+
+                    {/* RIGHT: EATING GUIDE & AI RECIPE */}
+                    <div className="flex-1 bg-slate-50 rounded-2xl p-6 border border-slate-200 flex flex-col">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-xl font-black text-slate-700">吃飯順序大解密</h3>
+                            <button onClick={() => setShowGuide(!showGuide)} className="text-xs bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full font-bold">
+                                {showGuide ? '隱藏祕技' : '顯示祕技'}
+                            </button>
+                        </div>
+
+                        {showGuide ? (
+                             <div className="space-y-4 flex-1">
+                                {eatingSteps.map((s, i) => (
+                                    <div key={i} className={`p-4 rounded-xl border-2 transition-all cursor-pointer ${step === i ? 'bg-white border-emerald-500 shadow-md scale-105' : 'bg-slate-100 border-transparent opacity-60'}`} onClick={() => setStep(i)}>
+                                        <div className="flex items-center gap-4">
+                                            <div className="text-3xl">{s.icon}</div>
+                                            <div>
+                                                <div className="font-bold text-slate-800">{s.text}</div>
+                                                <div className="text-xs text-slate-500">{s.desc}</div>
+                                            </div>
+                                            {step === i && <div className="ml-auto"><Icons.Check /></div>}
+                                        </div>
+                                    </div>
+                                ))}
+                                <div className="mt-4 p-4 bg-yellow-50 text-yellow-800 rounded-xl text-sm font-bold border border-yellow-200">
+                                    💡 小撇步：每一口都要咬 20 下，讓大腦知道你飽了！
+                                </div>
+                             </div>
+                        ) : (
+                            <div className="flex-1 flex items-center justify-center flex-col text-slate-400 cursor-pointer" onClick={() => setShowGuide(true)}>
+                                <div className="text-6xl mb-4 animate-pulse">🥗</div>
+                                <p>你知道「先吃飯」還是「先吃菜」</p>
+                                <p>會決定你會不會變胖嗎？</p>
+                                <button className="mt-4 bg-emerald-500 text-white px-6 py-2 rounded-full font-bold shadow-lg hover:bg-emerald-600 transition-transform hover:scale-105">
+                                    揭曉答案
+                                </button>
+                            </div>
+                        )}
+
+                        {/* AI RECIPE OUTPUT */}
+                        <div className="mt-6 border-t border-slate-200 pt-6">
+                            <h3 className="text-xl font-black text-slate-700 mb-3 flex items-center">
+                                AI 食譜天才 ✨
+                            </h3>
+                            <button 
+                                onClick={generateRecipe} 
+                                disabled={!isBalanced || recipeLoading}
+                                className={`w-full py-3 rounded-xl font-bold transition-colors ${
+                                    isBalanced && !recipeLoading ? 'bg-indigo-500 text-white hover:bg-indigo-600' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                                }`}
+                            >
+                                {recipeLoading ? '生成中...' : isBalanced ? '生成專屬食譜！' : '請先平衡餐盤'}
+                            </button>
+                            
+                            {recipe && (
+                                <div className="mt-4 bg-white p-4 rounded-xl border border-indigo-200 text-sm whitespace-pre-wrap shadow-inner relative">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <p className="font-bold text-indigo-700">AI 推薦：</p>
+                                        <button 
+                                            onClick={playRecipe}
+                                            disabled={ttsLoading}
+                                            className="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 p-2 rounded-full transition-colors disabled:opacity-50"
+                                            title="唸給我聽"
+                                        >
+                                            <Icons.Sound />
+                                        </button>
+                                    </div>
+                                    <p>{recipe}</p>
+                                    {ttsLoading && <div className="text-xs text-indigo-400 mt-2">語音生成中...</div>}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- GEMINI FEATURE 2: CHAT DOJO (Refusal Script + TTS) ---
+        const ChatDojoSection = ({ fetchGeminiContent, fetchGeminiTTS, updateHp }) => {
+            const [step, setStep] = useState(0);
+            const [scenarioInput, setScenarioInput] = useState('');
+            const [script, setScript] = useState(null);
+            const [scriptLoading, setScriptLoading] = useState(false);
+            const [ttsLoading, setTtsLoading] = useState(false);
+
+            const handleDecision = (decision) => {
+                if (decision === 'win') {
+                    setStep(2);
+                    setScript(null);
+                } else {
+                    setStep(3);
+                    updateHp(-20);
+                }
+            };
+
+            const generateScript = async () => {
+                if (!scenarioInput) return;
+                
+                setScriptLoading(true);
+                setScript(null);
+
+                const userPrompt = `請為我設計一句聰明、有禮貌但堅定的拒絕台詞，來應對以下情境："${scenarioInput}"。台詞中請包含「健康」或「身體」相關的理由。讓這句話看起來帥氣又不會傷到朋友。字數 50 字以內。`;
+                const systemInstruction = "你是一位專門訓練兒童社交技巧和健康意識的專家。你的回答必須是繁體中文，並提供一句能夠讓對方舒服接受的拒絕話術。請勿使用 Markdown 格式，直接輸出台詞。";
+                
+                const result = await fetchGeminiContent(userPrompt, systemInstruction);
+                setScript(result.text);
+                setScriptLoading(false);
+            };
+
+            const playScript = async () => {
+                if(!script) return;
+                setTtsLoading(true);
+                await fetchGeminiTTS(script);
+                setTtsLoading(false);
+            };
+
+            return (
+                <div className="flex flex-col h-full justify-between">
+                    <div className="space-y-4 mb-4 flex-1 overflow-y-auto max-h-64 p-2 bg-slate-50 rounded-xl">
+                         <div className="flex items-start">
+                            <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center mr-3 font-bold text-gray-600">友</div>
+                            <div className="bg-gray-200 p-4 rounded-2xl rounded-tl-none text-slate-700 max-w-[80%]">
+                                {step === 0 ? "誒！我買了超辣的辣條，吃一根啦！沒關係的！" : step === 2 ? "哇...你說得好像很有道理，那我也不吃了。" : "嘿嘿，我就知道你不敢拒絕！(HP -20)"}
+                            </div>
+                         </div>
+                         {step === 2 && (
+                             <div className="flex items-end justify-end">
+                                <div className="bg-emerald-100 text-emerald-800 p-4 rounded-2xl rounded-tr-none max-w-[80%]">謝謝，但我不想吃。那些添加劑對身體不好，我們去吃水果吧！</div>
+                                <div className="w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center ml-3 text-white font-bold">我</div>
+                             </div>
+                         )}
+                         {/* AI Generated Script Display */}
+                         {script && (
+                             <div className="flex items-end justify-end w-full">
+                                <div className="bg-yellow-100 text-yellow-800 p-4 rounded-2xl rounded-tr-none max-w-[80%] border border-yellow-300 shadow-sm relative">
+                                    <div className="flex justify-between items-start mb-1 gap-2">
+                                        <span className="font-bold text-xs text-yellow-600 uppercase">AI 智慧台詞</span>
+                                        <button onClick={playScript} disabled={ttsLoading} className="text-yellow-700 hover:text-yellow-900"><Icons.Sound /></button>
+                                    </div>
+                                    {script}
+                                </div>
+                                <div className="w-10 h-10 bg-yellow-500 rounded-full flex items-center justify-center ml-3 text-white font-bold shrink-0">AI</div>
+                             </div>
+                         )}
+                    </div>
+                    
+                    {/* INPUT / ACTION AREA */}
+                    <div className="mt-4 border-t border-slate-200 pt-4">
+                        {step === 0 ? (
+                            <div className="grid grid-cols-2 gap-4">
+                                <button onClick={() => handleDecision('win')} className="bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl font-bold">堅定拒絕 😎</button>
+                                <button onClick={() => handleDecision('lose')} className="bg-slate-300 hover:bg-slate-400 text-slate-700 py-3 rounded-xl font-bold">勉強接受 😓</button>
+                            </div>
+                        ) : (
+                            <button onClick={() => setStep(0)} className="w-full bg-indigo-100 text-indigo-600 py-3 rounded-xl font-bold">再來一次</button>
+                        )}
+                        
+                        <div className="mt-4">
+                            <h4 className="text-sm font-bold text-slate-600 mb-2 flex items-center">
+                                AI 拒絕話術生成器 ✨
+                            </h4>
+                            <input
+                                type="text"
+                                placeholder="輸入朋友勸說的情境，例如：'他說不吃就是不給面子！'"
+                                value={scenarioInput}
+                                onChange={(e) => setScenarioInput(e.target.value)}
+                                className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm mb-2"
+                            />
+                            <button
+                                onClick={generateScript}
+                                disabled={!scenarioInput || scriptLoading}
+                                className={`w-full py-2 rounded-lg text-sm font-bold transition-colors ${
+                                    scenarioInput && !scriptLoading ? 'bg-yellow-500 text-black hover:bg-yellow-400' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                                }`}
+                            >
+                                {scriptLoading ? '生成 AI 台詞中...' : '生成 AI 拒絕台詞'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // NEW GEMINI FEATURE: AI BOSS BATTLE
+        const BossBattle = ({ updateHp, fetchGeminiContent }) => {
+            const [hp, setHp] = useState(100);
+            const [currentQuestion, setCurrentQuestion] = useState(null);
+            const [loading, setLoading] = useState(false);
+            const [gameWon, setGameWon] = useState(false);
+
+            const initialQuestion = {
+                q: "辣條為什麼這麼香？",
+                o: ["全是天然香料", "加了大量人工香精"],
+                a: 1
+            };
+
+            useEffect(() => {
+                if (!currentQuestion) setCurrentQuestion(initialQuestion);
+            }, []);
+
+            const generateQuestion = async () => {
+                setLoading(true);
+                const prompt = `Generate a JSON object for a multiple choice health trivia question for kids. 
+                Fields required: 
+                "q": The question string (in Traditional Chinese).
+                "o": An array of 2 short strings for options (in Traditional Chinese).
+                "a": The index of the correct option (0 or 1).
+                Example: {"q": "吃蘋果要削皮嗎？", "o": ["要，皮有毒", "不用，皮有營養"], "a": 1}
+                Output ONLY valid JSON.`;
+                
+                try {
+                    const result = await fetchGeminiContent(prompt, "You are a JSON generator. Output only valid JSON without markdown formatting.");
+                    const cleanText = result.text.replace(/```json|```/g, '').trim();
+                    const questionData = JSON.parse(cleanText);
+                    if(questionData && questionData.q && questionData.o) {
+                        setCurrentQuestion(questionData);
+                    } else {
+                        throw new Error("Invalid format");
+                    }
+                } catch (e) {
+                    console.error("AI Question Failed", e);
+                    // Fallback question
+                    setCurrentQuestion({
+                        q: "喝水最好的時間是？",
+                        o: ["口渴才喝", "隨時補充"],
+                        a: 1
+                    });
+                }
+                setLoading(false);
+            };
+
+            const answer = (i) => {
+                if (i === currentQuestion.a) {
+                    const newHp = hp - 34;
+                    setHp(newHp);
+                    if (newHp <= 0) {
+                        setGameWon(true);
+                    } else {
+                        generateQuestion(); // Fetch next question on success
+                    }
+                } else {
+                    updateHp(-10);
+                    alert("答錯了！被魔王攻擊！");
+                }
+            };
+
+            return (
+                <div className="text-center h-full flex flex-col justify-center">
+                    {gameWon ? (
+                        <div className="animate-bounce">
+                            <div className="text-6xl mb-4">🏆</div>
+                            <h3 className="text-2xl font-bold text-yellow-400">大勝利！</h3>
+                            <button onClick={() => window.location.reload()} className="mt-4 px-6 py-2 bg-white text-black rounded-full font-bold">重玩遊戲</button>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="text-8xl mb-4 relative">
+                                👹
+                                <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 w-32 h-3 bg-gray-700 rounded-full overflow-hidden border border-gray-500">
+                                    <div className="h-full bg-red-500 transition-all" style={{width: `${hp}%`}}></div>
+                                </div>
+                            </div>
+                            
+                            <div className="bg-slate-800 p-6 rounded-2xl border border-slate-600 mt-4 min-h-[200px] flex flex-col justify-center">
+                                {loading ? (
+                                    <div className="text-cyan-400 animate-pulse font-bold">魔王正在思考邪惡的問題...</div>
+                                ) : currentQuestion ? (
+                                    <>
+                                        <p className="text-xl font-bold mb-6 text-white">{currentQuestion.q}</p>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            {currentQuestion.o.map((opt, i) => (
+                                                <button key={i} onClick={() => answer(i)} className="bg-slate-700 hover:bg-indigo-600 py-4 rounded-xl font-bold transition-colors text-lg text-cyan-50">
+                                                    {opt}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="text-red-400">魔王連線錯誤...</div>
+                                )}
+                            </div>
+                            <div className="mt-2 text-xs text-slate-500">AI 隨機出題中 ✨</div>
+                        </>
+                    )}
+                </div>
+            );
+        };
+
+        // NEW GEMINI FEATURE: HERO STORY GENERATOR
+        const HeroStorySection = ({ fetchGeminiContent }) => {
+            const [name, setName] = useState("");
+            const [weapon, setWeapon] = useState("");
+            const [story, setStory] = useState("");
+            const [loading, setLoading] = useState(false);
+
+            const generateStory = async () => {
+                if(!name || !weapon) return;
+                setLoading(true);
+                setStory("");
+
+                const prompt = `Create a short, exciting superhero story (max 100 words) for a kid named "${name}".
+                Their special weapon is "${weapon}".
+                The enemy is a "Junk Food Monster" (e.g., Grease Goblin, Sugar Demon).
+                The story should be action-packed but funny.
+                Language: Traditional Chinese.`;
+
+                const result = await fetchGeminiContent(prompt, "You are a storyteller for kids.");
+                setStory(result.text);
+                setLoading(false);
+            };
+
+            return (
+                <div className="bg-gradient-to-r from-cyan-500 to-blue-600 p-8 rounded-3xl text-white shadow-lg">
+                    <h2 className="text-3xl font-black mb-6 text-center">🦸 健康英雄傳說</h2>
+                    <div className="flex flex-col md:flex-row gap-4 mb-6">
+                        <input 
+                            type="text" 
+                            placeholder="你的英雄名字" 
+                            value={name} 
+                            onChange={e => setName(e.target.value)}
+                            className="flex-1 px-4 py-3 rounded-xl text-slate-800 font-bold focus:outline-none focus:ring-4 focus:ring-yellow-400"
+                        />
+                        <input 
+                            type="text" 
+                            placeholder="你的健康武器 (例: 花椰菜劍)" 
+                            value={weapon} 
+                            onChange={e => setWeapon(e.target.value)}
+                            className="flex-1 px-4 py-3 rounded-xl text-slate-800 font-bold focus:outline-none focus:ring-4 focus:ring-yellow-400"
+                        />
+                        <button 
+                            onClick={generateStory} 
+                            disabled={loading || !name || !weapon}
+                            className="bg-yellow-400 hover:bg-yellow-300 text-yellow-900 px-8 py-3 rounded-xl font-black shadow-lg transition-transform active:scale-95 disabled:opacity-50 disabled:scale-100"
+                        >
+                            {loading ? "撰寫中..." : "生成傳說"}
+                        </button>
+                    </div>
+                    
+                    {story && (
+                        <div className="bg-white/10 backdrop-blur-md p-6 rounded-2xl border border-white/30 text-lg leading-relaxed font-medium animate-in slide-in-from-bottom-4">
+                            {story}
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const PledgeSection = () => {
+            const [name, setName] = useState("");
+            const [done, setDone] = useState(false);
+            return (
+                <section className="py-16 px-6 bg-gradient-to-br from-emerald-600 to-teal-700 text-white text-center">
+                    <div className="max-w-2xl mx-auto">
+                        <h2 className="text-3xl font-black mb-4">📜 健康宣誓牆</h2>
+                        {!done ? (
+                            <div className="bg-white/10 backdrop-blur-sm p-8 rounded-3xl border border-white/20">
+                                <p className="text-xl font-bold mb-6">我願意為了健康的身體，拒絕垃圾食物！</p>
+                                <input type="text" placeholder="輸入你的名字" value={name} onChange={e=>setName(e.target.value)} className="w-full text-center py-3 rounded-xl text-slate-800 font-bold text-xl mb-6" />
+                                <button onClick={() => {if(name) setDone(true)}} className="bg-yellow-400 hover:bg-yellow-300 text-yellow-900 px-8 py-3 rounded-xl font-black text-xl shadow-lg transition-transform hover:scale-105">蓋章宣誓 💮</button>
+                            </div>
+                        ) : (
+                            <div className="bg-white text-slate-800 p-10 rounded-3xl shadow-2xl transform rotate-1 border-8 border-yellow-400 relative">
+                                <h3 className="text-2xl font-black text-emerald-600 mb-2">健康守護者證書</h3>
+                                <p className="text-lg mb-2">茲證明</p>
+                                <p className="text-4xl font-black mb-4 border-b-4 border-slate-200 inline-block px-8 pb-2">{name}</p>
+                                <p className="text-lg">已通過大冒險，成為健康小英雄！</p>
+                                <div className="absolute top-4 right-8 w-24 h-24 border-4 border-red-500 rounded-full flex items-center justify-center text-red-500 text-xl font-black transform -rotate-12 opacity-80">合格</div>
+                            </div>
+                        )}
+                    </div>
+                </section>
+            );
+        };
+
+        const BloodVesselSection = () => {
+            const [fat, setFat] = useState(0);
+            return (
+                <div>
+                    <div className="relative h-40 bg-red-200 rounded-2xl border-4 border-red-300 overflow-hidden mb-6 shadow-inner isolate">
+                        {[...Array(6)].map((_, i) => (
+                            <div key={i} className={`absolute w-8 h-8 bg-red-600 rounded-full shadow-sm blood-cell ${fat > 5 ? 'slow' : ''}`} style={{top: `${20 + Math.random()*60}%`, animationDelay: `${i}s`}}></div>
+                        ))}
+                        <div className="absolute top-0 w-full bg-yellow-400 transition-all duration-500 opacity-90 border-b-2 border-yellow-500" style={{height: `${fat*5}%`}}></div>
+                        <div className="absolute bottom-0 w-full bg-yellow-400 transition-all duration-500 opacity-90 border-t-2 border-yellow-500" style={{height: `${fat*5}%`}}></div>
+                    </div>
+                    <div className="flex gap-4">
+                        <button onClick={() => setFat(f => Math.min(f+1, 9))} className="flex-1 bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-bold shadow-lg active:scale-95 transition-all">
+                            吃辣條 🧧
+                        </button>
+                        <button onClick={() => setFat(0)} className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl font-bold shadow-lg active:scale-95 transition-all">
+                            吃蔬菜排毒 🥗
+                        </button>
+                    </div>
+                    <p className="text-center text-sm text-red-400 mt-3 font-bold">血管阻塞度：{fat * 10}%</p>
+                </div>
+            );
+        };
+
+        const LatiaoLab = ({ updateHp }) => {
+            const [count, setCount] = useState(1);
+            const [xray, setXray] = useState(false);
+            return (
+                <div className="flex flex-col h-full justify-between">
+                    <div className="relative bg-white rounded-2xl p-6 text-center border border-slate-200 mb-6 h-40 flex items-center justify-center overflow-hidden">
+                        <div className={`text-8xl transition-all duration-500 ${xray ? 'blur-sm opacity-20' : ''}`}>🧧</div>
+                        {xray && (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                <span className="bg-black text-red-500 font-mono font-bold px-2 py-1 mb-2 animate-pulse rounded">⚠️ 高鈉 High Sodium</span>
+                                <span className="bg-black text-red-500 font-mono font-bold px-2 py-1 animate-pulse rounded">⚠️ 添加劑 Additives</span>
+                            </div>
+                        )}
+                        <button onClick={() => setXray(!xray)} className="absolute top-2 right-2 text-xs bg-gray-200 hover:bg-gray-300 px-2 py-1 rounded-full font-bold">
+                            {xray ? '關閉 X 光' : '開啟 X 光'}
+                        </button>
+                    </div>
+                    <div>
+                        <input type="range" min="1" max="10" value={count} 
+                            onChange={(e) => {
+                                const val = parseInt(e.target.value);
+                                if(val > count) updateHp(-5);
+                                setCount(val);
+                            }} 
+                            className="w-full h-3 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-red-500 mb-6" 
+                        />
+                        <div className="grid grid-cols-2 gap-4 text-center">
+                            <div className="bg-blue-50 p-3 rounded-xl">
+                                <div className="text-3xl font-black text-blue-600">{(count * 1.5).toFixed(1)}</div>
+                                <div className="text-sm text-blue-400 font-bold">碗白飯熱量</div>
+                            </div>
+                            <div className="bg-orange-50 p-3 rounded-xl">
+                                <div className="text-3xl font-black text-orange-500">{count * 15}</div>
+                                <div className="text-sm text-orange-400 font-bold">需跑操場(圈)</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const FaceSimulator = () => {
+            const [zits, setZits] = useState([]);
+            const addZit = (e) => {
+                const rect = e.target.getBoundingClientRect();
+                setZits([...zits, { x: e.clientX - rect.left, y: e.clientY - rect.top, id: Date.now() }]);
+            };
+            return (
+                <div className="text-center">
+                    <p className="text-sm text-orange-600 mb-4 font-bold">點擊臉部餵食辣條，小心副作用！</p>
+                    <div onClick={addZit} className="relative w-48 h-48 mx-auto bg-[#ffdbac] rounded-full border-4 border-[#e0b586] cursor-pointer shadow-xl overflow-hidden active:scale-95 transition-transform">
+                        <div className="absolute top-14 left-10 w-4 h-4 bg-slate-800 rounded-full"></div>
+                        <div className="absolute top-14 right-10 w-4 h-4 bg-slate-800 rounded-full"></div>
+                        <div className={`absolute bottom-10 left-1/2 -translate-x-1/2 w-16 h-2 bg-slate-800 transition-all duration-300 ${zits.length > 5 ? 'rotate-12 top-32 rounded-full h-6 w-6 border-4 border-slate-800 bg-red-900' : 'rounded-full'}`}></div>
+                        <div className="absolute inset-0 bg-yellow-500 mix-blend-multiply pointer-events-none transition-opacity duration-500" style={{ opacity: Math.min(zits.length * 0.1, 0.8) }}></div>
+                        {zits.map(z => (
+                            <div key={z.id} className="absolute w-5 h-5 bg-red-500 rounded-full border-2 border-red-800 shadow-md animate-pulse" style={{top: z.y-10, left: z.x-10}}>
+                                <div className="w-1.5 h-1.5 bg-yellow-100 rounded-full absolute top-1 left-1"></div>
+                            </div>
+                        ))}
+                    </div>
+                    <button onClick={() => setZits([])} className="mt-6 bg-white border-2 border-orange-200 text-orange-600 px-6 py-2 rounded-full font-bold hover:bg-orange-50 transition-colors">
+                        使用洗面乳 (重置)
+                    </button>
+                </div>
+            );
+        };
+
+        // NEW GEMINI FEATURE: FUTURE SELF CHAT
+        const TimeMachineSection = ({ age, setAge, hp, fetchGeminiContent }) => {
+            const [question, setQuestion] = useState("");
+            const [answer, setAnswer] = useState("");
+            const [loading, setLoading] = useState(false);
+
+            const askFutureSelf = async () => {
+                if(!question) return;
+                setLoading(true);
+                setAnswer("");
+                
+                const healthStatus = hp > 80 ? "非常好，充滿活力" : hp > 50 ? "普通，有時會累" : "很差，經常生病";
+                const futureAge = 10 + parseInt(age / 100 * 50); // Rough age estimate
+                
+                const prompt = `你現在扮演使用者 ${futureAge} 年後的自己。
+                根據使用者目前的健康分數（${hp}分，滿分100），你的健康狀況是：${healthStatus}。
+                如果分數高，你很感謝現在的他；如果分數低，你會抱怨身體哪裡痛或後悔以前亂吃。
+                使用者問你：「${question}」
+                請用幽默、有點誇張的語氣回答，字數 50 字以內。`;
+
+                const result = await fetchGeminiContent(prompt, "你是一個來自未來的時光旅人，正在跟小時候的自己對話。");
+                setAnswer(result.text);
+                setLoading(false);
+            };
+
+            return (
+                <div className="text-center h-full flex flex-col justify-between">
+                    <p className="text-sm text-cyan-200 mb-4">拖動下方滑桿，穿越到 10 年後...</p>
+                    <div className="relative w-48 h-48 mx-auto rounded-2xl overflow-hidden border-4 border-cyan-700 shadow-2xl bg-gray-800 mb-4">
+                        <div className="absolute inset-0 flex items-center justify-center flex-col bg-slate-700">
+                            <span className="text-7xl filter brightness-110">👶</span>
+                            <span className="text-sm text-white font-bold mt-2">現在的你</span>
+                        </div>
+                        <div className="absolute inset-0 flex items-center justify-center flex-col bg-gray-900" style={{ opacity: age / 100 }}>
+                            <span className="text-7xl filter grayscale contrast-150">👴</span>
+                            <span className="text-sm text-gray-400 font-bold mt-2">未來的你</span>
+                        </div>
+                    </div>
+                    
+                    <input type="range" value={age} onChange={(e) => setAge(e.target.value)} className="w-full h-3 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-cyan-400 mb-6" />
+
+                    {/* Chat Interface */}
+                    <div className="bg-slate-700 rounded-xl p-3 text-left">
+                        <div className="text-xs text-cyan-300 font-bold mb-2">🔮 傳送訊息給未來的自己</div>
+                        {answer && (
+                            <div className="bg-cyan-900/50 p-2 rounded-lg mb-2 text-sm text-cyan-100 border border-cyan-700/50">
+                                <span className="mr-2">👴:</span>{answer}
+                            </div>
+                        )}
+                        <div className="flex gap-2">
+                            <input 
+                                type="text" 
+                                value={question}
+                                onChange={e => setQuestion(e.target.value)}
+                                placeholder="問問未來：我長高了嗎？"
+                                className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-2 py-1 text-sm text-white focus:outline-none focus:border-cyan-500"
+                            />
+                            <button 
+                                onClick={askFutureSelf}
+                                disabled={loading}
+                                className="bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-1 rounded-lg text-xs font-bold disabled:opacity-50"
+                            >
+                                {loading ? '傳送中...' : '傳送'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // NEW GEMINI FEATURE: FOOD DETECTIVE
+        const FoodDetectiveSection = ({ fetchGeminiContent, fetchGeminiTTS }) => {
+            const [food, setFood] = useState("");
+            const [analysis, setAnalysis] = useState(null);
+            const [loading, setLoading] = useState(false);
+            const [ttsLoading, setTtsLoading] = useState(false);
+
+            const analyzeFood = async () => {
+                if(!food) return;
+                setLoading(true);
+                setAnalysis(null);
+                
+                const prompt = `分析食物：「${food}」。
+                1. 給一個健康分數 (1-100)。
+                2. 找出身體裡的「嫌疑犯」(壞成分，如糖、反式脂肪)。
+                3. 找出「目擊者」(好營養，如纖維、蛋白質)。
+                4. 給一個短短的偵探結案報告 (30字內)。
+                格式：
+                分數：[分數]
+                嫌疑犯：[內容]
+                目擊者：[內容]
+                結案：[內容]`;
+
+                const result = await fetchGeminiContent(prompt, "你是一位嚴格但幽默的食物偵探，專門調查食物對小朋友身體的影響。");
+                setAnalysis(result.text);
+                setLoading(false);
+            };
+
+            const playAnalysis = async () => {
+                if(!analysis) return;
+                setTtsLoading(true);
+                await fetchGeminiTTS(analysis);
+                setTtsLoading(false);
+            };
+
+            return (
+                <div className="h-full flex flex-col">
+                    <div className="flex gap-2 mb-4">
+                        <input 
+                            type="text" 
+                            value={food}
+                            onChange={e => setFood(e.target.value)}
+                            placeholder="輸入食物名稱 (例: 炸雞)"
+                            className="flex-1 px-4 py-2 rounded-xl border-2 border-slate-200 focus:border-indigo-500 focus:outline-none"
+                        />
+                        <button 
+                            onClick={analyzeFood}
+                            disabled={loading || !food}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 rounded-xl transition-colors disabled:bg-slate-300"
+                        >
+                            <Icons.Search />
+                        </button>
+                    </div>
+
+                    <div className="flex-1 bg-slate-50 rounded-2xl p-6 border-2 border-dashed border-slate-300 flex items-center justify-center relative overflow-hidden">
+                        {loading ? (
+                            <div className="text-center">
+                                <div className="text-4xl animate-bounce mb-2">🕵️‍♂️</div>
+                                <div className="text-slate-500 font-bold">偵探調查中...</div>
+                            </div>
+                        ) : analysis ? (
+                            <div className="w-full h-full text-left overflow-y-auto">
+                                <div className="flex justify-between items-center mb-2">
+                                    <h4 className="font-black text-indigo-800 text-lg">調查報告</h4>
+                                    <button onClick={playAnalysis} disabled={ttsLoading} className="text-indigo-600 hover:bg-indigo-100 p-2 rounded-full">
+                                        <Icons.Sound />
+                                    </button>
+                                </div>
+                                <div className="text-slate-700 whitespace-pre-wrap font-medium leading-relaxed">
+                                    {analysis}
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="text-slate-400 text-center">
+                                <div className="text-4xl mb-2 opacity-50">📁</div>
+                                <p>輸入食物名稱</p>
+                                <p>查看偵探檔案</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const MiniGame = ({ updateHp }) => {
+            const [playing, setPlaying] = useState(false);
+            const [score, setScore] = useState(0);
+            const [fallingItems, setFallingItems] = useState([]); // ITEMS ARE NOW IN STATE
+            const basketRef = useRef(50); // Basket position is still a ref
+            
+            // Game Loop Effect - Now uses functional state updates for stability
+            useEffect(() => {
+                if (!playing) return;
+                
+                const interval = setInterval(() => {
+                    // 聲明在外部，用於在 setFallingItems 之後觸發副作用
+                    let damageChange = 0;
+                    let scoreChange = 0;
+
+                    setFallingItems(prevItems => {
+                        let newItems = [...prevItems];
+                        
+                        // 1. Spawn
+                        if (Math.random() < 0.08) {
+                            newItems.push({ id: Date.now(), x: Math.random() * 90 + 5, y: 0, type: Math.random() > 0.4 ? 'bad' : 'good' });
+                        }
+                        
+                        // 2. Move
+                        newItems = newItems.map(item => ({ ...item, y: item.y + 2.5 }));
+
+                        // 3. Filter and Tally side effects (Mutating outer variables, but safe within setInterval's async context)
+                        newItems = newItems.filter(item => {
+                            const caught = item.y > 80 && item.y < 95 && Math.abs(item.x - basketRef.current) < 15;
+                            if (caught) {
+                                if (item.type === 'good') {
+                                    damageChange += 5; // Heal
+                                    scoreChange += 10;
+                                } else {
+                                    damageChange -= 10; // Damage
+                                }
+                                return false; // Remove item
+                            }
+                            return item.y < 100; // Remove if out of bounds
+                        });
+                        
+                        // Return the new items array (Pure function result)
+                        return newItems;
+                    });
+                    
+                    // 4. Apply side effects sequentially and synchronously after setFallingItems completes
+                    if (damageChange !== 0) {
+                        updateHp(damageChange); 
+                    }
+                    if (scoreChange > 0) {
+                        setScore(s => s + scoreChange); 
+                    }
+
+                }, 30); // ~33 FPS
+
+                return () => clearInterval(interval);
+            }, [playing, updateHp]); // updateHp 必須作為依賴項
+
+            const startGame = () => {
+                setScore(0);
+                setFallingItems([]);
+                setPlaying(true);
+            };
+
+            return (
+                <div className="relative rounded-3xl overflow-hidden border-4 border-indigo-700 shadow-2xl bg-slate-800 h-96 touch-none">
+                     <div className="absolute top-4 left-6 z-10">
+                        <h2 className="text-3xl font-black text-white drop-shadow-md">🎮 營養接接樂</h2>
+                        <p className="text-indigo-300">左右滑動接住蘋果，避開辣條！</p>
+                    </div>
+                    <div className="absolute top-4 right-6 z-10 text-4xl font-mono text-yellow-400 font-bold drop-shadow-md">{score}</div>
+                    
+                    <div className="w-full h-full relative"
+                        onMouseMove={e => { 
+                            if(!playing) return;
+                            const rect = e.currentTarget.getBoundingClientRect(); 
+                            basketRef.current = ((e.clientX - rect.left) / rect.width) * 100; 
+                        }}
+                        onTouchMove={e => { 
+                            if(!playing) return;
+                            const rect = e.currentTarget.getBoundingClientRect(); 
+                            basketRef.current = ((e.touches[0].clientX - rect.left) / rect.width) * 100; 
+                        }}
+                    >
+                        {!playing && (
+                            <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-20 backdrop-blur-sm">
+                                <button onClick={startGame} className="bg-yellow-500 hover:bg-yellow-400 text-black text-xl font-black py-4 px-12 rounded-full shadow-[0_0_20px_rgba(234,179,8,0.6)] hover:scale-105 transition-transform">開始遊戲 START</button>
+                            </div>
+                        )}
+
+                        {/* Items are now rendered from state: fallingItems */}
+                        {fallingItems.map(i => (
+                            <div 
+                                key={i.id} 
+                                className="absolute text-5xl transform -translate-x-1/2 will-change-transform" 
+                                style={{top: `${i.y}%`, left: `${i.x}%`}}
+                            >
+                                {i.type === 'good' ? '🍎' : '🥢'}
+                            </div>
+                        ))}
+
+                        {/* Basket (Uses basketRef for dynamic position) */}
+                        <div 
+                            className="absolute bottom-4 text-6xl transform -translate-x-1/2 transition-transform duration-75 ease-out" 
+                            style={{left: `${basketRef.current}%`}}
+                        >
+                            🧺
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+
+        // --- MAIN APP ---
+        const App = () => {
+            const [hp, setHp] = useState(100);
+            const [menuOpen, setMenuOpen] = useState(false);
+            const [timeMachineAge, setTimeMachineAge] = useState(0); // Lifted state
+
+            // Gemini API Setup
+            const apiKey = ""; // The execution environment provides the key at runtime
+            const LLM_MODEL = 'gemini-2.5-flash-preview-09-2025';
+            const TTS_MODEL = 'gemini-2.5-flash-preview-tts';
+            
+            const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${LLM_MODEL}:generateContent?key=${apiKey}`;
+            const TTS_URL = `https://generativelanguage.googleapis.com/v1beta/models/${TTS_MODEL}:generateContent?key=${apiKey}`;
+
+            // Helper: PCM to WAV Header
+            // Gemini Flash TTS returns raw PCM 24kHz. We need to wrap it in WAV container for browser playback.
+            const getWavHeader = (bufferLength, sampleRate = 24000) => {
+                const buffer = new ArrayBuffer(44);
+                const view = new DataView(buffer);
+                
+                const writeString = (offset, string) => {
+                    for (let i = 0; i < string.length; i++) {
+                        view.setUint8(offset + i, string.charCodeAt(i));
+                    }
+                };
+
+                writeString(0, 'RIFF');
+                view.setUint32(4, 36 + bufferLength, true); // File size
+                writeString(8, 'WAVE');
+                writeString(12, 'fmt ');
+                view.setUint32(16, 16, true); // Subchunk1Size
+                view.setUint16(20, 1, true); // PCM
+                view.setUint16(22, 1, true); // Mono
+                view.setUint32(24, sampleRate, true);
+                view.setUint32(28, sampleRate * 2, true); // ByteRate
+                view.setUint16(32, 2, true); // BlockAlign
+                view.setUint16(34, 16, true); // BitsPerSample
+                writeString(36, 'data');
+                view.setUint32(40, bufferLength, true);
+                
+                return buffer;
+            };
+
+            // Helper function for Gemini TTS
+            const fetchGeminiTTS = async (textToSay) => {
+                try {
+                    const payload = {
+                        contents: [{ parts: [{ text: textToSay }] }],
+                        generationConfig: {
+                            responseModalities: ["AUDIO"],
+                            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } } }
+                        }
+                    };
+                    const response = await fetch(TTS_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    if (!response.ok) throw new Error("TTS API Error");
+                    const result = await response.json();
+                    const audioContent = result.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+                    
+                    if (audioContent) {
+                        const binaryString = window.atob(audioContent);
+                        const len = binaryString.length;
+                        const bytes = new Uint8Array(len);
+                        for (let i = 0; i < len; i++) {
+                            bytes[i] = binaryString.charCodeAt(i);
+                        }
+                        
+                        const wavHeader = getWavHeader(len);
+                        const blob = new Blob([wavHeader, bytes], { type: 'audio/wav' });
+                        const audioUrl = URL.createObjectURL(blob);
+                        const audio = new Audio(audioUrl);
+                        audio.play();
+                    }
+                } catch (e) {
+                    console.error("TTS Failed:", e);
+                    alert("語音生成失敗，請稍後再試。");
+                }
+            };
+
+            // Helper function for Gemini API calls
+            const fetchGeminiContent = async (prompt, systemInstruction) => {
+                for (let attempt = 0; attempt < 3; attempt++) {
+                    try {
+                        const payload = {
+                            contents: [{ parts: [{ text: prompt }] }],
+                            systemInstruction: { parts: [{ text: systemInstruction }] },
+                        };
+
+                        const response = await fetch(API_URL, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+
+                        if (!response.ok) {
+                            throw new Error(`API error: ${response.statusText}`);
+                        }
+
+                        const result = await response.json();
+                        const text = result.candidates?.[0]?.content?.parts?.[0]?.text || "抱歉，AI 暫時無法生成內容。";
+                        return { text: text, success: true };
+
+                    } catch (error) {
+                        console.error(`Gemini API attempt ${attempt + 1} failed:`, error);
+                        if (attempt < 2) {
+                            await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+                        } else {
+                            return { text: "抱歉，連線失敗，請稍後再試。", success: false };
+                        }
+                    }
+                }
+            };
+            
+            // Safer HP Setter
+            const updateHp = (amount) => {
+                setHp(prev => Math.min(Math.max(prev + amount, 0), 100));
+            };
+
+            const sections = [
+                { id: 'plate', title: '🍽️ 完美餐盤實驗室' },
+                { id: 'detective', title: '🕵️‍♂️ 食物偵探社' },
+                { id: 'digest', title: '🫁 腸胃道大冒險' },
+                { id: 'factory', title: '🏭 恐怖真相工廠' },
+                { id: 'simulations', title: '🩸 模擬實驗室' },
+                { id: 'effects', title: '🧟 變臉與時光機' },
+                { id: 'game', title: '🎮 營養接接樂' },
+                { id: 'chat', title: '💬 拒絕誘惑道場' },
+                { id: 'boss', title: '⚔️ 最終魔王' },
+                { id: 'hero', title: '🦸 健康英雄傳說' },
+            ];
+
+            const scrollTo = (id) => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.scrollIntoView({ behavior: 'smooth' });
+                    setMenuOpen(false);
+                }
+            };
+
+            return (
+                <div className="w-full max-w-5xl mx-auto min-h-screen relative pb-20 bg-white shadow-2xl my-0 md:my-8 rounded-none md:rounded-[3rem] overflow-hidden border-x border-slate-200">
+                    
+                    {/* --- HEADER BAR (Sticky) --- */}
+                    <div className="fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-lg border-b border-slate-200 shadow-sm transition-all duration-300">
+                        <div className="max-w-5xl mx-auto px-6 py-3 flex items-center justify-between">
+                            
+                            {/* Logo / Title */}
+                            <div className="flex items-center space-x-2 cursor-pointer" onClick={() => window.scrollTo(0,0)}>
+                                <div className="bg-emerald-500 text-white p-2 rounded-lg font-black text-xl">H</div>
+                                <span className="font-bold text-slate-700 hidden sm:block">健康大冒險</span>
+                            </div>
+
+                            {/* HP Bar */}
+                            <div className="flex-1 max-w-md mx-6">
+                                <div className="flex justify-between text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">
+                                    <span>Health Points</span>
+                                    <span>{Math.round(hp)}%</span>
+                                </div>
+                                <div className="h-4 bg-slate-100 rounded-full overflow-hidden border border-slate-300 relative shadow-inner">
+                                    <div 
+                                        className={`h-full transition-all duration-500 ease-out ${hp < 30 ? 'bg-red-500 animate-pulse' : 'bg-gradient-to-r from-emerald-400 to-green-600'}`} 
+                                        style={{ width: `${hp}%` }}
+                                    ></div>
+                                </div>
+                            </div>
+
+                            {/* Menu Button */}
+                            <button 
+                                onClick={() => setMenuOpen(!menuOpen)}
+                                className="p-2 rounded-full hover:bg-slate-100 active:scale-95 transition-transform"
+                            >
+                                {menuOpen ? <Icons.X /> : <Icons.Menu />}
+                            </button>
+                        </div>
+
+                        {/* Dropdown Menu */}
+                        {menuOpen && (
+                            <div className="absolute top-full left-0 w-full bg-white/95 backdrop-blur-xl border-b border-slate-200 shadow-xl p-4 flex flex-col items-center animate-in slide-in-from-top-2">
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full max-w-4xl">
+                                    {sections.map(sec => (
+                                        <button 
+                                            key={sec.id} 
+                                            onClick={() => scrollTo(sec.id)}
+                                            className="p-4 bg-slate-50 hover:bg-emerald-50 hover:text-emerald-600 rounded-xl font-bold text-slate-600 transition-colors text-center border border-slate-100"
+                                        >
+                                            {sec.title}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* --- HERO SECTION --- */}
+                    <header className="pt-32 pb-12 px-8 text-center bg-gradient-to-b from-blue-50 via-white to-white relative overflow-hidden">
+                        <div className="absolute top-10 left-10 w-64 h-64 bg-emerald-200 rounded-full blur-3xl opacity-30 animate-float"></div>
+                        <div className="absolute bottom-10 right-10 w-64 h-64 bg-yellow-200 rounded-full blur-3xl opacity-30 animate-float" style={{animationDelay: '1.5s'}}></div>
+                        
+                        <div className="relative z-10 max-w-3xl mx-auto">
+                            <span className="inline-block py-1 px-3 rounded-full bg-emerald-100 text-emerald-800 text-sm font-bold mb-4">Gemini AI Edition ✨</span>
+                            <h1 className="text-4xl md:text-6xl font-black text-slate-800 mb-6 tracking-tight leading-tight">
+                                身體保衛戰
+                                <span className="block text-xl md:text-3xl text-emerald-600 mt-2 font-bold">學會吃對食物，做自己的英雄</span>
+                            </h1>
+                        </div>
+                    </header>
+
+                    {/* --- PERFECT PLATE LAB --- */}
+                    <section id="plate" className="py-12 px-6 md:px-12 bg-green-50 border-y border-green-100 scroll-mt-24">
+                        <div className="max-w-5xl mx-auto">
+                            <h2 className="text-3xl font-black text-emerald-800 mb-2 flex items-center gap-3">
+                                🍽️ 完美餐盤實驗室
+                            </h2>
+                            <p className="text-emerald-600 mb-8 text-lg">學會「211 餐盤法則」與「進食順序」，打造無敵健康體質！</p>
+                            
+                            <HealthyPlateLab updateHp={updateHp} fetchGeminiContent={fetchGeminiContent} fetchGeminiTTS={fetchGeminiTTS} />
+                        </div>
+                    </section>
+
+                    {/* --- NEW SECTION: DETECTIVE + DIGESTIVE TRACK --- */}
+                    {/* Combine into a 2-col layout or separate. Let's separate nicely. */}
+                    
+                    <section id="detective" className="py-12 px-6 md:px-12 bg-indigo-50 border-y border-indigo-100">
+                         <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-12 items-start">
+                             <div className="order-2 md:order-1">
+                                <h2 className="text-3xl font-black text-indigo-800 mb-2 flex items-center gap-3">
+                                    🕵️‍♂️ 食物偵探社
+                                </h2>
+                                <p className="text-indigo-600 mb-6 text-lg">輸入食物名稱，讓 AI 偵探幫你查出它的健康機密！</p>
+                                <div className="h-96">
+                                     <FoodDetectiveSection fetchGeminiContent={fetchGeminiContent} fetchGeminiTTS={fetchGeminiTTS} />
+                                </div>
+                             </div>
+                             <div className="order-1 md:order-2 bg-indigo-200 rounded-3xl p-8 flex items-center justify-center flex-col text-center">
+                                 <div className="text-8xl mb-4">🥜</div>
+                                 <h3 className="text-2xl font-black text-indigo-900 mb-2">小心隱藏陷阱！</h3>
+                                 <p className="text-indigo-700 font-bold">有些食物看起來很好吃，其實藏著大壞蛋（糖分、色素）！快用偵探鏡照一照！</p>
+                             </div>
+                         </div>
+                    </section>
+
+                    {/* --- SECTION: DIGESTIVE TRACK (Full Width) --- */}
+                    <section id="digest" className="py-12 px-6 md:px-12 bg-pink-50 border-y border-pink-100">
+                        <div className="max-w-4xl mx-auto">
+                            <h2 className="text-3xl font-black text-pink-700 mb-2 flex items-center gap-3">
+                                🫁 腸胃道大冒險
+                            </h2>
+                            <p className="text-pink-600 mb-8 text-lg">天然食物好消化，加工食品會卡卡！</p>
+                            
+                            <div className="bg-white rounded-3xl p-8 shadow-lg border border-pink-200 space-y-8">
+                                {/* Good Food */}
+                                <div className="group relative cursor-pointer">
+                                    <div className="flex justify-between text-sm font-bold text-gray-400 mb-2">
+                                        <span>入口</span>
+                                        <span>天然纖維加速消化 ✨</span>
+                                        <span>出口</span>
+                                    </div>
+                                    <div className="h-6 bg-gray-100 rounded-full overflow-hidden relative">
+                                        <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_50%,#fce7f3_50%)] bg-[length:20px_20px]"></div>
+                                    </div>
+                                    <div className="absolute top-6 left-0 text-4xl transition-all duration-[1500ms] ease-linear group-hover:left-[95%]">
+                                        🍎
+                                    </div>
+                                </div>
+
+                                {/* Bad Food */}
+                                <div className="group relative cursor-pointer pt-4">
+                                    <div className="flex justify-between text-sm font-bold text-gray-400 mb-2">
+                                        <span>入口</span>
+                                        <span className="text-red-400">油脂堆積，消化困難 ⚠️</span>
+                                        <span>出口</span>
+                                    </div>
+                                    <div className="h-6 bg-gray-100 rounded-full overflow-hidden relative">
+                                        <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_50%,#fee2e2_50%)] bg-[length:20px_20px]"></div>
+                                        <div className="absolute left-1/3 top-0 h-full w-12 bg-yellow-300 opacity-60"></div>
+                                        <div className="absolute left-2/3 top-0 h-full w-12 bg-yellow-300 opacity-60"></div>
+                                    </div>
+                                    <div className="absolute top-10 left-0 text-4xl transition-all duration-[6000ms] ease-linear group-hover:left-[95%] group-hover:stuck-effect">
+                                        🧧
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* --- SECTION: FACTORY --- */}
+                    <section id="factory" className="py-16 px-6 md:px-12 bg-slate-900 text-white">
+                        <div className="max-w-4xl mx-auto">
+                            <h2 className="text-3xl font-black text-yellow-400 mb-12 text-center">🏭 恐怖真相工廠</h2>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative">
+                                <div className="hidden md:block absolute top-1/2 left-0 w-full h-1 bg-slate-700 -z-10 transform -translate-y-1/2"></div>
+                                {[
+                                    { step: 1, title: "不明粉末", desc: "麵粉混合 12 種化學添加粉末", color: "bg-gray-500", icon: "☠️" },
+                                    { step: 2, title: "色素油澡", desc: "浸泡在反覆使用的紅油中染色", color: "bg-red-600", icon: "🩸" },
+                                    { step: 3, title: "廉價包裝", desc: "包裝成只需 10 元的誘人零食", color: "bg-yellow-500", icon: "🎁" }
+                                ].map((item) => (
+                                    <div key={item.step} className="bg-slate-800 p-6 rounded-2xl border border-slate-700 relative hover:transform hover:-translate-y-2 transition-transform duration-300">
+                                        <div className={`w-12 h-12 ${item.color} rounded-full flex items-center justify-center text-2xl font-bold mb-4 border-4 border-slate-900 absolute -top-6 left-6`}>
+                                            {item.step}
+                                        </div>
+                                        <div className="mt-4 text-center">
+                                            <div className="text-4xl mb-3">{item.icon}</div>
+                                            <h3 className="text-xl font-bold mb-2">{item.title}</h3>
+                                            <p className="text-slate-400 text-sm">{item.desc}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* --- DUAL GRID: BLOOD + LAB --- */}
+                    <section id="simulations" className="py-12 px-6 md:px-12 bg-white">
+                        <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div className="bg-red-50 rounded-3xl p-6 border border-red-100 shadow-sm">
+                                <h2 className="text-2xl font-bold text-red-800 mb-4">🩸 血管阻塞模擬</h2>
+                                <BloodVesselSection />
+                            </div>
+                            <div className="bg-slate-50 rounded-3xl p-6 border border-slate-200 shadow-sm">
+                                <h2 className="text-2xl font-bold text-slate-800 mb-4">🧪 辣條代價計算</h2>
+                                <LatiaoLab updateHp={updateHp} />
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* --- DUAL GRID: FACE + TIME --- */}
+                    <section id="effects" className="py-12 px-6 md:px-12 bg-orange-50">
+                         <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div className="bg-white/60 rounded-3xl p-6 border border-orange-200">
+                                <h2 className="text-2xl font-bold text-orange-800 mb-4">🧟 變臉模擬器</h2>
+                                <FaceSimulator />
+                            </div>
+                            <div className="bg-slate-800 rounded-3xl p-6 border border-slate-700 text-white">
+                                <h2 className="text-2xl font-bold text-cyan-400 mb-4">⏳ 時光照相館 & 未來對話</h2>
+                                <TimeMachineSection age={timeMachineAge} setAge={setTimeMachineAge} hp={hp} fetchGeminiContent={fetchGeminiContent} />
+                            </div>
+                         </div>
+                    </section>
+
+                    {/* --- GAME SECTION --- */}
+                    <section id="game" className="py-16 px-6 md:px-12 bg-indigo-900 text-white relative overflow-hidden">
+                        <div className="max-w-4xl mx-auto">
+                            <MiniGame updateHp={updateHp} />
+                        </div>
+                    </section>
+
+                    {/* --- DUAL GRID: CHAT + BOSS --- */}
+                    <section className="py-12 px-6 md:px-12 bg-slate-50">
+                        <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-8">
+                            <div id="chat" className="bg-white rounded-3xl p-6 shadow-md border border-indigo-100">
+                                <h2 className="text-2xl font-bold text-indigo-700 mb-4">💬 拒絕誘惑道場</h2>
+                                <ChatDojoSection fetchGeminiContent={fetchGeminiContent} fetchGeminiTTS={fetchGeminiTTS} updateHp={updateHp} />
+                            </div>
+                            <div id="boss" className="bg-slate-900 rounded-3xl p-6 shadow-md border border-slate-700 text-white">
+                                <h2 className="text-2xl font-bold text-red-500 mb-4">⚔️ AI 魔王最終戰</h2>
+                                <BossBattle updateHp={updateHp} fetchGeminiContent={fetchGeminiContent} />
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* --- HERO STORY SECTION (NEW) --- */}
+                    <section id="hero" className="py-16 px-6 md:px-12 bg-white">
+                        <div className="max-w-4xl mx-auto">
+                            <HeroStorySection fetchGeminiContent={fetchGeminiContent} />
+                        </div>
+                    </section>
+
+                    {/* --- PLEDGE --- */}
+                    <PledgeSection />
+
+                    <footer className="bg-white border-t border-slate-200 text-center py-12">
+                        <p className="text-slate-400 font-bold">Health Adventure V3.0 AI Edition</p>
+                    </footer>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
